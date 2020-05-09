@@ -1,0 +1,11 @@
+{
+    "sshfs.configs": [
+        {
+            "host": "enviro.lan",
+            "name": "enviro",
+            "password": "spoonguard",
+            "root": "/home/pi/enviroplus",
+            "username": "pi"
+        }
+    ]
+}
