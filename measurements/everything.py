@@ -30,7 +30,7 @@ except ImportError:
     from smbus import SMBus
 
 
-client = InfluxDBClient('localhost', '8086', database='example')
+client = InfluxDBClient('localhost', '8086', database='everything')
 client.create_database('everything')
 
 
