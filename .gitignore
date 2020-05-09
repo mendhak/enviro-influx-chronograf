@@ -1,0 +1,4 @@
+influxdbbackups
+influxdbdata
+chronografdata
+*.db
