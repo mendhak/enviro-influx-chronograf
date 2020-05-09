@@ -2,6 +2,7 @@ version: '3.7'
 
 services:
     influxdb:
+        restart: always
         image: mendhak/arm32v6-influxdb
         container_name: influxdb
         ports:
@@ -11,6 +12,7 @@ services:
             - ./influxdbbackups:/backups/
 
     chronograf:
+        restart: always
         image: mendhak/arm32v6-chronograf
         container_name: chronograf
         ports:
