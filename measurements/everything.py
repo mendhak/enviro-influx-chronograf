@@ -31,7 +31,7 @@ except ImportError:
 
 
 client = InfluxDBClient('localhost', '8086', database='example')
-client.create_database('measurements')
+client.create_database('everything')
 
 
 

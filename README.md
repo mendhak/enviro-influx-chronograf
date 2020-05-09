@@ -59,6 +59,8 @@ Restore db:
 
     docker exec -it influxdb influxd restore -portable /backups/
 
+Wait up to 5 minutes for Chronograf to appear!  Then browse to http://raspberrypi/ for the Chronograf interface
+
 
 # Set up dependencies
 
