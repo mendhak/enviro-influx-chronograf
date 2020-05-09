@@ -38,36 +38,18 @@ docker-compose --version
 # Get InfluxDB and Chronograf
 
 
-```
-version: '3.7'
-
-services:
-    influxdb:
-        image: mendhak/arm32v6-influxdb
-        container_name: influxdb
-        ports:
-            - 8086:8086
-        volumes:
-            - ./influxdbdata:/root/.influxdb/data/
-            - ./influxdbbackups:/backups/
-
-    chronograf:
-        image: mendhak/arm32v6-chronograf
-        container_name: chronograf
-        ports:
-            - 80:8888
-        command: chronograf --influxdb-url=http://influxdb:8086 --bolt-path /chronografdata/bolt.db
-        volumes:
-            - ./chronografdata:/chronografdata/
-```
+A docker-compose.yml exists for InfluxDB and Chronograf with ARM32V6 images. 
 
 Run it
 
+```
+    cd measurements
     docker-compose up -d
+```    
 
 Create db:
 
-    docker exec -it influxdb influx -execute "CREATE DATABASE test"
+    docker exec -it influxdb influx -execute "CREATE DATABASE measurements"
 
 Backup db:
 
@@ -76,13 +58,6 @@ Backup db:
 Restore db:
 
     docker exec -it influxdb influxd restore -portable /backups/
-
-
-# Never mind grafana 
-
-No image, and couldn't get it working in arm32v6.
-
-
 
 
 # Set up dependencies
