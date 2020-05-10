@@ -47,9 +47,7 @@ Run it
     docker-compose up -d
 ```    
 
-Create db:
-
-    docker exec -it influxdb influx -execute "CREATE DATABASE measurements"
+Wait up to 5 minutes for Influx and Chronograf to come up! 
 
 Backup db:
 
@@ -58,8 +56,8 @@ Backup db:
 Restore db:
 
     docker exec -it influxdb influxd restore -portable /backups/
-
-Wait up to 5 minutes for Chronograf to appear!  Then browse to http://raspberrypi/ for the Chronograf interface
+ 
+ Then browse to http://raspberrypi/ for the Chronograf interface
 
 
 # Set up dependencies
@@ -78,10 +76,50 @@ pip3 install influxdb
 
 
 
-# Run the script
+# Run the main sensors script
+
+Via crontab: 
+
+```
+@reboot sleep 60 && cd /home/pi/enviro-influx-chronograf/measurements && python3 everything.py &
+```
+
+Manually:
+
 
 ```
 cd measurements
 python3 everything.py
+```
+
+
+# Run the pihole stats collection script
+
+Via crontab:
+
+```
+30 * * * * cd /home/pi/enviro-influx-chronograf/measurements && python3 piholestats.py > piholestats.log 2>&1
+```
+
+Manually:
+
+```
+cd measurements
+python3 piholestats.py
+```
+
+# Run the backup scripts
+
+Via crontab:
+
+```
+00 * * * * cd /home/pi/enviro-influx-chronograf/measurements && bash backup.sh > backup.log 2>&1
+```
+
+Manually:
+
+```
+cd measurements
+./backup.sh
 ```
 
