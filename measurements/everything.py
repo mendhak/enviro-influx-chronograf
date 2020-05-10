@@ -30,15 +30,30 @@ except ImportError:
     from smbus import SMBus
 
 
-client = InfluxDBClient('localhost', '8086', database='everything')
-client.create_database('everything')
-
-
-
 logging.basicConfig(
     format='%(asctime)s.%(msecs)03d %(levelname)-8s %(message)s',
     level=logging.INFO,
     datefmt='%Y-%m-%d %H:%M:%S')
+
+
+def is_influxdb_available():
+    try:
+        resp=requests.get('http://localhost:8086/health')
+        return resp.json()['status']=='pass'
+    except:
+        return False
+
+
+while not is_influxdb_available():
+    logging.info("Waiting for InfluxDB...")
+    time.sleep(5)
+
+try:
+    client = InfluxDBClient('localhost', '8086', database='everything')
+    client.create_database('everything')
+except Exception:
+        logging.exception("Could not connect to InfluxDB")
+
 
 
 # Handle kills and interrupts                   
@@ -378,113 +393,118 @@ trend = "-"
 start_time = time.time()
 
 while True:
-    path = os.path.dirname(os.path.realpath(__file__))
-    progress, period, day, local_dt = sun_moon_time(city_name, time_zone)
-    background = draw_background(progress, period, day)
+    
+    try:
+        path = os.path.dirname(os.path.realpath(__file__))
+        progress, period, day, local_dt = sun_moon_time(city_name, time_zone)
+        background = draw_background(progress, period, day)
 
-    # Time.
-    time_elapsed = time.time() - start_time
-    date_string = local_dt.strftime("%d %b %y").lstrip('0')
-    time_string = local_dt.strftime("%H:%M")
-    img = overlay_text(background, (0 + margin, 0 + margin), time_string, font_lg)
-    img = overlay_text(img, (WIDTH - margin, 0 + margin), date_string, font_lg, align_right=True)
+        # Time.
+        time_elapsed = time.time() - start_time
+        date_string = local_dt.strftime("%d %b %y").lstrip('0')
+        time_string = local_dt.strftime("%H:%M")
+        img = overlay_text(background, (0 + margin, 0 + margin), time_string, font_lg)
+        img = overlay_text(img, (WIDTH - margin, 0 + margin), date_string, font_lg, align_right=True)
 
-    # Temperature
-    temperature = bme280.get_temperature()
+        # Temperature
+        temperature = bme280.get_temperature()
 
-    # Corrected temperature
-    cpu_temp = get_cpu_temperature()
-    cpu_temps = cpu_temps[1:] + [cpu_temp]
-    avg_cpu_temp = sum(cpu_temps) / float(len(cpu_temps))
-    corr_temperature = temperature - ((avg_cpu_temp - temperature) / factor)
+        # Corrected temperature
+        cpu_temp = get_cpu_temperature()
+        cpu_temps = cpu_temps[1:] + [cpu_temp]
+        avg_cpu_temp = sum(cpu_temps) / float(len(cpu_temps))
+        corr_temperature = temperature - ((avg_cpu_temp - temperature) / factor)
 
-    if time_elapsed > 30:
-        if min_temp is not None and max_temp is not None:
-            if corr_temperature < min_temp:
+        if time_elapsed > 30:
+            if min_temp is not None and max_temp is not None:
+                if corr_temperature < min_temp:
+                    min_temp = corr_temperature
+                elif corr_temperature > max_temp:
+                    max_temp = corr_temperature
+            else:
                 min_temp = corr_temperature
-            elif corr_temperature > max_temp:
                 max_temp = corr_temperature
+
+        temp_string = f"{corr_temperature:.0f}°C"
+        img = overlay_text(img, (68, 18), temp_string, font_lg, align_right=True)
+        spacing = font_lg.getsize(temp_string)[1] + 1
+        if min_temp is not None and max_temp is not None:
+            range_string = f"{min_temp:.0f}-{max_temp:.0f}"
         else:
-            min_temp = corr_temperature
-            max_temp = corr_temperature
+            range_string = "------"
+        img = overlay_text(img, (68, 18 + spacing), range_string, font_sm, align_right=True, rectangle=True)
+        temp_icon = Image.open(f"{path}/icons/temperature.png")
+        img.paste(temp_icon, (margin, 18), mask=temp_icon)
 
-    temp_string = f"{corr_temperature:.0f}°C"
-    img = overlay_text(img, (68, 18), temp_string, font_lg, align_right=True)
-    spacing = font_lg.getsize(temp_string)[1] + 1
-    if min_temp is not None and max_temp is not None:
-        range_string = f"{min_temp:.0f}-{max_temp:.0f}"
-    else:
-        range_string = "------"
-    img = overlay_text(img, (68, 18 + spacing), range_string, font_sm, align_right=True, rectangle=True)
-    temp_icon = Image.open(f"{path}/icons/temperature.png")
-    img.paste(temp_icon, (margin, 18), mask=temp_icon)
+        # Humidity
+        humidity = bme280.get_humidity()
+        #corr_humidity = correct_humidity(humidity, temperature, corr_temperature)
+        corr_humidity = humidity
+        humidity_string = f"{corr_humidity:.0f}%"
+        img = overlay_text(img, (68, 48), humidity_string, font_lg, align_right=True)
+        spacing = font_lg.getsize(humidity_string)[1] + 1
+        humidity_desc = describe_humidity(corr_humidity).upper()
+        img = overlay_text(img, (68, 48 + spacing), humidity_desc, font_sm, align_right=True, rectangle=True)
+        humidity_icon = Image.open(f"{path}/icons/humidity-{humidity_desc.lower()}.png")
+        img.paste(humidity_icon, (margin, 48), mask=humidity_icon)
 
-    # Humidity
-    humidity = bme280.get_humidity()
-    #corr_humidity = correct_humidity(humidity, temperature, corr_temperature)
-    corr_humidity = humidity
-    humidity_string = f"{corr_humidity:.0f}%"
-    img = overlay_text(img, (68, 48), humidity_string, font_lg, align_right=True)
-    spacing = font_lg.getsize(humidity_string)[1] + 1
-    humidity_desc = describe_humidity(corr_humidity).upper()
-    img = overlay_text(img, (68, 48 + spacing), humidity_desc, font_sm, align_right=True, rectangle=True)
-    humidity_icon = Image.open(f"{path}/icons/humidity-{humidity_desc.lower()}.png")
-    img.paste(humidity_icon, (margin, 48), mask=humidity_icon)
+        # Light
+        light = ltr559.get_lux()
+        light_string = f"{int(light):,}"
+        img = overlay_text(img, (WIDTH - margin, 18), light_string, font_lg, align_right=True)
+        spacing = font_lg.getsize(light_string.replace(",", ""))[1] + 1
+        light_desc = describe_light(light).upper()
+        img = overlay_text(img, (WIDTH - margin - 1, 18 + spacing), light_desc, font_sm, align_right=True, rectangle=True)
+        light_icon = Image.open(f"{path}/icons/bulb-{light_desc.lower()}.png")
+        img.paste(humidity_icon, (80, 18), mask=light_icon)
 
-    # Light
-    light = ltr559.get_lux()
-    light_string = f"{int(light):,}"
-    img = overlay_text(img, (WIDTH - margin, 18), light_string, font_lg, align_right=True)
-    spacing = font_lg.getsize(light_string.replace(",", ""))[1] + 1
-    light_desc = describe_light(light).upper()
-    img = overlay_text(img, (WIDTH - margin - 1, 18 + spacing), light_desc, font_sm, align_right=True, rectangle=True)
-    light_icon = Image.open(f"{path}/icons/bulb-{light_desc.lower()}.png")
-    img.paste(humidity_icon, (80, 18), mask=light_icon)
-
-    # Pressure
-    pressure = bme280.get_pressure()
-    t = time.time()
-    mean_pressure, change_per_hour, trend = analyse_pressure(pressure, t)
-    pressure_string = f"{int(mean_pressure):,} {trend}"
-    img = overlay_text(img, (WIDTH - margin, 48), pressure_string, font_lg, align_right=True)
-    pressure_desc = describe_pressure(mean_pressure).upper()
-    spacing = font_lg.getsize(pressure_string.replace(",", ""))[1] + 1
-    img = overlay_text(img, (WIDTH - margin - 1, 48 + spacing), pressure_desc, font_sm, align_right=True, rectangle=True)
-    pressure_icon = Image.open(f"{path}/icons/weather-{pressure_desc.lower()}.png")
-    img.paste(pressure_icon, (80, 48), mask=pressure_icon)
+        # Pressure
+        pressure = bme280.get_pressure()
+        t = time.time()
+        mean_pressure, change_per_hour, trend = analyse_pressure(pressure, t)
+        pressure_string = f"{int(mean_pressure):,} {trend}"
+        img = overlay_text(img, (WIDTH - margin, 48), pressure_string, font_lg, align_right=True)
+        pressure_desc = describe_pressure(mean_pressure).upper()
+        spacing = font_lg.getsize(pressure_string.replace(",", ""))[1] + 1
+        img = overlay_text(img, (WIDTH - margin - 1, 48 + spacing), pressure_desc, font_sm, align_right=True, rectangle=True)
+        pressure_icon = Image.open(f"{path}/icons/weather-{pressure_desc.lower()}.png")
+        img.paste(pressure_icon, (80, 48), mask=pressure_icon)
 
 
-    # Noise at frequencies
-    amps = noise.get_amplitudes_at_frequency_ranges([
-        (100, 500),
-        (500, 1000),
-        (1000, 4000)
-    ])
-    amps = [n * 32 for n in amps]
-    low_freq=amps[0]
-    mid_freq=amps[1]
-    high_freq=amps[2]
+        # Noise at frequencies
+        amps = noise.get_amplitudes_at_frequency_ranges([
+            (100, 500),
+            (500, 1000),
+            (1000, 4000)
+        ])
+        amps = [n * 32 for n in amps]
+        low_freq=amps[0]
+        mid_freq=amps[1]
+        high_freq=amps[2]
 
-    logging.info("Temp: {}, Humid: {}, Light: {}, Press: {}".format(corr_temperature, humidity, light, pressure))
-    logging.info("Low Freq: {}, Mid Freq: {}, High Freq: {}".format(low_freq, mid_freq, high_freq))
+        logging.info("Temp: {}, Humid: {}, Light: {}, Press: {}".format(corr_temperature, humidity, light, pressure))
+        logging.info("Low Freq: {}, Mid Freq: {}, High Freq: {}".format(low_freq, mid_freq, high_freq))
 
-    if time_elapsed>60:
+        if time_elapsed>60:
 
-        # Log to Influx DB
-        influxtime = datetime.utcnow()
-        json_body=[{ "measurement" : "temperature", "time": influxtime, "fields": { "value": float(corr_temperature) }}]
-        client.write_points(json_body, time_precision='ms')
-        json_body=[{ "measurement" : "light", "time": influxtime, "fields": { "value": float(light) }}]
-        client.write_points(json_body, time_precision='ms')
-        json_body=[{ "measurement" : "pressure", "time": influxtime, "fields": { "value": float(pressure) }}]
-        client.write_points(json_body, time_precision='ms')
-        json_body=[{ "measurement" : "humidity", "time": influxtime, "fields": { "value": float(humidity) }}]
-        client.write_points(json_body, time_precision='ms')
-        json_body=[{ "measurement" : "noise", "time": influxtime, "fields": { "low_freq": float(low_freq), "mid_freq": float(mid_freq), "high_Freq": float(high_freq) }}]
-        client.write_points(json_body, time_precision='ms')
+            # Log to Influx DB
+            influxtime = datetime.utcnow()
+            json_body=[{ "measurement" : "temperature", "time": influxtime, "fields": { "value": float(corr_temperature) }}]
+            client.write_points(json_body, time_precision='ms')
+            json_body=[{ "measurement" : "light", "time": influxtime, "fields": { "value": float(light) }}]
+            client.write_points(json_body, time_precision='ms')
+            json_body=[{ "measurement" : "pressure", "time": influxtime, "fields": { "value": float(pressure) }}]
+            client.write_points(json_body, time_precision='ms')
+            json_body=[{ "measurement" : "humidity", "time": influxtime, "fields": { "value": float(humidity) }}]
+            client.write_points(json_body, time_precision='ms')
+            json_body=[{ "measurement" : "noise", "time": influxtime, "fields": { "low_freq": float(low_freq), "mid_freq": float(mid_freq), "high_Freq": float(high_freq) }}]
+            client.write_points(json_body, time_precision='ms')
 
-    # Display image
-    disp.display(img)
+        # Display image
+        disp.display(img)
+    except Exception:
+        logging.exception("Error in main loop")
+
 
     if terminate:
         logging.info("Exiting.")
